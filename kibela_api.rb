@@ -1,14 +1,18 @@
 require 'net/http'
 require 'json'
+require 'base64'
 
 module KibelaAPI
   def self.upload_attachment(file_path)
     puts "UPLOAD ATTACHMENT: "
+    data_string = Base64.encode64(File.open(file_path).read).gsub("\n",'')
+    data_url = "data:image/png;base64,#{data_string}"
+
 
     resp = req({
       query: <<~GRAPHQL,
-        mutation($name: String!, $data: Blob!, $kind: AttachmentKind!, $groupIds: [ID!]!, $folders: [FolderInput!]) {
-          uploadAttachment(input: { name: $name, data: $data, kind: GENERAL) {
+        mutation($name: String!, $dataUrl: String!, $kind: AttachmentKind!) {
+          uploadAttachmentWithDataUrl(input: { name: $name, dataUrl: $dataUrl, kind: $kind}) {
             attachment {
               id,
               path
@@ -17,8 +21,9 @@ module KibelaAPI
         }
       GRAPHQL
       variables: {
-        name: file_name,
-        data: file_as_blob,
+        name: File.basename(file_path),
+        dataUrl: data_url,
+        kind: "GENERAL"
       },
     })
 
@@ -125,7 +130,8 @@ module KibelaAPI
     header = {
       "Authorization" => "Bearer #{TOKEN}",
       'Content-Type' => 'application/json',
-      'User-Agent' => 'Simple Kibela Importer',
+      'Accept' => 'application/json',
+      'User-Agent' => 'Simple Kibela Updater',
     }
     resp = http.request_post('/api/v1', JSON.generate(query), header)
     JSON.parse(resp.body, symbolize_names: true).tap do |content|

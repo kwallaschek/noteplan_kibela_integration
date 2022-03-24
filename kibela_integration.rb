@@ -15,6 +15,28 @@ KIBELA_BASE_PATH = ""
 FILE_CHANGE_CHECKING_RATE = 360 # in seconds
 
 
+
+def handle_attachments(content, file_path)
+  new_content = content.each_line.map do |line|
+                  if line.include? "![image]"
+                    path = line[9..-3]
+                    base_name = File.basename(path)
+                    full_file_path = "#{file_path[0..-5]}_attachments/#{base_name}"
+                    kibela_path = MacCommentAbility::read_attachment_comment(full_file_path)
+                    if kibela_path.size < 5
+                      res = KibelaAPI::upload_attachment(full_file_path)
+                      kibela_path = res[:data][:uploadAttachmentWithDataUrl][:attachment][:path]
+                      MacCommentAbility::write_attachment_comment(full_file_path, kibela_path)
+                    end
+                    "<img title='写真' alt='写真' src='#{kibela_path}'>"
+                  else
+                    line
+                  end
+                end
+  new_content.join('')
+end
+
+
 def disect_path(file_path)
   path = file_path.gsub(NOTEPLAN_BASE_PATH, "")
   path = path.gsub("/#{File.basename(file_path)}", "")
@@ -24,6 +46,7 @@ def add_note(file_path)
   file = File.open(file_path)
   title = file.readline[2..-1]
   content = file.read
+  content = handle_attachments(content, file_path)
   path = disect_path(file_path)
 
   puts "Create the note \"#{title}\" on Kibela"
@@ -38,6 +61,7 @@ def update_note(file_path, file_kibela_id)
   file = File.open(file_path)
   title = file.readline[2..-1]
   content = file.read
+  content = handle_attachments(content, file_path)
   path = disect_path(file_path)
 
   if file_kibela_id
@@ -75,4 +99,5 @@ def listener
   sleep
 end
 
+MacCommentAbility.init
 listener
