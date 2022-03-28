@@ -4,7 +4,6 @@ require 'listen'
 require_relative './mac_comment_ability'
 require_relative './kibela_api'
 
-
 TEAM = ""
 TOKEN = ""
 GROUPID = ""
@@ -14,7 +13,7 @@ KIBELA_BASE_PATH = ""
 
 FILE_CHANGE_CHECKING_RATE = 360 # in seconds
 
-
+MAGIC_KEYWORD_FOR_PULLING = "pull-kibela"
 
 def handle_attachments(content, file_path)
   new_content = content.each_line.map do |line|
@@ -73,6 +72,15 @@ def update_note(file_path, file_kibela_id)
   end
 end
 
+def has_to_be_pulled?(file_path)
+  file = File.open(file_path)
+  content = file.read
+  content.each_line do |line|
+    return true if line.include? MAGIC_KEYWORD_FOR_PULLING
+  end
+  false
+end
+
 def listener
   listener = Listen.to(NOTEPLAN_BASE_PATH+'/Notes', NOTEPLAN_BASE_PATH+'/Calendar', latency: FILE_CHANGE_CHECKING_RATE) do |modified, added, removed|
     puts(modified: modified, added: added, removed: removed)
@@ -95,7 +103,27 @@ def listener
     end
   end
 
+  pulling_lister = Listen.to(NOTEPLAN_BASE_PATH+'/Notes', NOTEPLAN_BASE_PATH+'/Calendar') do |modified, added, removed|
+    puts(modified: modified, added: added, removed: removed)
+
+    if modified.size > 0 # Update Kibela Note
+      modified.each do |file_path|
+        file_kibela_id = MacCommentAbility::read_comment(file_path).gsub("\n","")
+        if file_kibela_id.size > 5
+          if has_to_be_pulled?(file_path)
+            new_note = KibelaAPI::pull_note(file_kibela_id)
+            File.open(file_path, "w") do |f|
+              f.write "# #{new_note[:data][:note][:title]}"
+              f.write new_note[:data][:note][:content]
+            end
+          end
+        end
+      end
+    end
+  end
+
   listener.start
+  pulling_lister.start
   sleep
 end
 
