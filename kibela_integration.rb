@@ -113,7 +113,7 @@ def listener
           if has_to_be_pulled?(file_path)
             new_note = KibelaAPI::pull_note(file_kibela_id)
             File.open(file_path, "w") do |f|
-              f.write "# #{new_note[:data][:note][:title]}"
+              f.write "# #{new_note[:data][:note][:title]}\n"
               f.write new_note[:data][:note][:content]
             end
           end
